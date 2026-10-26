@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Health Lab — Tantangan Inventaris Barang Kesehatan</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Cinzel:wght@600;700;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    <!-- html2canvas & jsPDF for PDF Certificate Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            800: '#1e1b4b',
+                            900: '#0f172a',
+                            950: '#080d1a'
+                        },
+                        brand: {
+                            purple: '#6d28d9',
+                            violet: '#4c1d95',
+                            accent: '#10b981',
+                            emerald: '#059669',
+                            blue: '#2563eb'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Cinzel', 'serif'],
+                        mono: ['Fira Code', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [v-cloak] { display: none; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+        }
+        .excel-grid input:focus {
+            outline: 2px solid #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+        }
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+        .animate-pulse-slow {
+            animation: pulse-slow 3s infinite ease-in-out;
+        }
+        /* Certificate Specific Print/Canvas Style */
+        .cert-border {
+            border: 12px double #1e1b4b;
+            outline: 3px solid #d97706;
+            outline-offset: -8px;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-800 font-sans min-h-screen antialiased selection:bg-purple-500 selection:text-white">
+
+<div id="app" v-cloak class="min-h-screen flex flex-col justify-between bg-gradient-to-br from-navy-950 via-navy-900 to-purple-950 text-slate-100">
+
+    <!-- TOP HEADER -->
+    <header class="sticky top-0 z-40 bg-navy-900/90 backdrop-blur-md border-b border-purple-900/40 shadow-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-950/50">
+                    <i class="fa-solid fa-file-excel text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-purple-300 to-emerald-400 bg-clip-text text-transparent">
+                        EXCEL HEALTH LAB
+                    </h1>
+                    <p class="text-xs text-purple-200 font-medium">SMKS Kesehatan Fania Salsabila Kota Jambi</p>
+                </div>
+            </div>
+
+            <!-- Header Stats & Status -->
+            <div class="flex items-center gap-4 text-xs sm:text-sm">
+                <div v-if="currentStep > 1" class="flex items-center gap-3 bg-navy-800/80 px-3 py-1.5 rounded-lg border border-purple-800/50">
+                    <div class="flex items-center gap-1.5 text-slate-300">
+                        <i class="fa-solid fa-user-graduate text-purple-400"></i>
+                        <span class="font-semibold text-white">{{ student.name || 'Siswa' }}</span>
+                        <span class="text-purple-300">({{ student.class }})</span>
+                    </div>
+                </div>
+
+                <div v-if="isEvaluated" class="bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-2">
+                    <i class="fa-solid fa-trophy text-amber-300"></i>
+                    <span>NILAI: {{ totalScore }}/100</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+
+        <!-- STEP 1: IDENTITAS SISWA -->
+        <section v-if="currentStep === 1" class="max-w-2xl mx-auto">
+            <div class="bg-white text-slate-900 rounded-3xl shadow-2xl p-6 sm:p-10 border border-purple-100 relative overflow-hidden">
+                <div class="absolute -right-12 -bottom-12 w-48 h-48 bg-purple-100 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="absolute -left-12 -top-12 w-48 h-48 bg-blue-100 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div class="text-center mb-8 relative z-10">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-purple-100 text-purple-700 text-3xl mb-3 shadow-inner">
+                        <i class="fa-solid fa-id-card"></i>
+                    </div>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-navy-900">Identitas Siswa Praktikum</h2>
+                    <p class="text-slate-600 text-sm mt-1">Lengkapi data diri untuk memulai tantangan Excel Health Lab</p>
+                </div>
+
+                <form @submit.prevent="startLab" class="space-y-5 relative z-10">
+                    <!-- Nama Sekolah (Auto) -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Nama Sekolah</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-hospital-user absolute left-3.5 top-3.5 text-slate-400"></i>
+                            <input type="text" :value="student.school" readonly class="w-full pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl font-medium text-slate-700 text-sm cursor-not-allowed">
+                        </div>
+                    </div>
+
+                    <!-- Nama Lengkap -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Nama Lengkap Siswa <span class="text-rose-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <i class="fa-solid fa-user absolute left-3.5 top-3.5 text-purple-500"></i>
+                            <input type="text" v-model.trim="student.name" required placeholder="" class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-600 focus:border-purple-600 text-sm font-medium transition">
+                        </div>
+                    </div>
+
+                    <!-- Kelas -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Kelas <span class="text-rose-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <i class="fa-solid fa-graduation-cap absolute left-3.5 top-3.5 text-purple-500"></i>
+                            <input type="text" v-model.trim="student.class" required placeholder="" class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-600 focus:border-purple-600 text-sm font-medium transition">
+                        </div>
+                    </div>
+
+                    <!-- Tanggal (Auto) -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Tanggal Pengerjaan</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-calendar-day absolute left-3.5 top-3.5 text-slate-400"></i>
+                            <input type="text" :value="student.date" readonly class="w-full pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl font-medium text-slate-700 text-sm cursor-not-allowed">
+                        </div>
+                    </div>
+
+                    <!-- Validation Warning -->
+                    <div v-if="formError" class="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-circle-exclamation text-base"></i>
+                        <span>{{ formError }}</span>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="w-full py-3.5 px-6 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-xl shadow-lg shadow-purple-900/30 transition transform hover:-translate-y-0.5 flex items-center justify-center gap-2">
+                        <span>Mulai Mengerjakan Tantangan</span>
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- STEP 2: TABEL INTERAKTIF & TUGAS REKAPITULASI -->
+        <section v-if="currentStep === 2" class="space-y-8">
+
+            <!-- INSTRUCTION CARD -->
+            <div class="bg-navy-800/90 border border-purple-800/60 rounded-2xl p-5 sm:p-6 shadow-xl backdrop-blur">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
+                        <i class="fa-solid fa-lightbulb text-sm"></i> Petunjuk Lengkap Pengisian Lembar Kerja Excel
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <div class="bg-navy-950/70 p-3.5 rounded-xl border border-purple-900/50 space-y-1">
+                            <div class="font-bold text-purple-300 flex items-center gap-1.5">
+                                <span class="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[10px]">1</span>
+                                <span>Total Manual (Kolom E)</span>
+                            </div>
+                            <p class="text-slate-300 text-[11px] leading-relaxed">
+                                Hitung perkalian antara <strong class="text-white">Jumlah (Kolom C)</strong> dan <strong class="text-white">Harga Satuan (Kolom D)</strong>. Ketikkan angkanya langsung tanpa titik atau simbol Rp.
+                            </p>
+                        </div>
+
+                        <div class="bg-navy-950/70 p-3.5 rounded-xl border border-purple-900/50 space-y-1">
+                            <div class="font-bold text-purple-300 flex items-center gap-1.5">
+                                <span class="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[10px]">2</span>
+                                <span>Rumus Excel (Kolom F)</span>
+                            </div>
+                            <p class="text-slate-300 text-[11px] leading-relaxed">
+                                Tulis rumus perkalian diawali tanda <code class="text-amber-300 font-bold bg-purple-950/80 px-1 py-0.5 rounded">=</code>. Gunakan referensi sel kuantitas dan harga pada baris yang sesuai (Baris 9 s/d 23).
+                            </p>
+                        </div>
+
+                        <div class="bg-navy-950/70 p-3.5 rounded-xl border border-purple-900/50 space-y-1">
+                            <div class="font-bold text-purple-300 flex items-center gap-1.5">
+                                <span class="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[10px]">3</span>
+                                <span>Tugas Rekapitulasi & SUM</span>
+                            </div>
+                            <p class="text-slate-300 text-[11px] leading-relaxed">
+                                Gunakan fungsi <code class="text-emerald-300 font-bold bg-purple-950/80 px-1 py-0.5 rounded">=SUM(...)</code> dengan rentang sel awal hingga akhir pada Tugas 1 dan Tugas 3 di bagian bawah tabel.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-purple-900/40 text-xs">
+                        <div class="flex flex-wrap items-center gap-4 text-slate-300">
+                            <span><strong class="text-purple-300">Jumlah (Qty):</strong> Kolom C</span>
+                            <span><strong class="text-purple-300">Harga Satuan:</strong> Kolom D</span>
+                            <span><strong class="text-purple-300">Rentang Baris Data:</strong> Baris 9 s/d 23</span>
+                        </div>
+                        <span class="text-amber-300 text-[11px] italic font-medium">
+                            *Pastikan diawali tanda = pada setiap penulisan rumus Excel.
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN INVENTORY TABLE -->
+            <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden text-slate-900">
+                <div class="p-4 sm:p-5 bg-gradient-to-r from-slate-900 to-navy-900 text-white flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-table text-purple-400 text-lg"></i>
+                        <h3 class="font-bold text-base">Tabel Data Barang & Rumus Perkalian</h3>
+                    </div>
+                    <span class="text-xs bg-purple-950 text-purple-300 px-3 py-1 rounded-full border border-purple-800">
+                        15 Barang Kesehatan
+                    </span>
+                </div>
+
+                <!-- TABLE CONTAINER -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                            <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[11px] tracking-wider">
+                                <th class="p-3 text-center w-14">Sel</th>
+                                <th class="p-3">Nama Barang</th>
+                                <th class="p-3 text-right w-24">Jumlah (C)</th>
+                                <th class="p-3 text-right w-32">Harga Satuan (D)</th>
+                                <th class="p-3 w-40">Total Manual (E)</th>
+                                <th class="p-3 w-44">Rumus Excel (F)</th>
+                                <th class="p-3 text-right w-36">Hasil Rumus</th>
+                                <th class="p-3 text-center w-32">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 font-medium">
+                            <tr v-for="(item, index) in items" :key="item.id" class="hover:bg-purple-50/50 transition">
+                                <!-- Excel Row Reference -->
+                                <td class="p-3 text-center font-mono font-bold text-purple-700 bg-slate-50">
+                                    {{ item.row }}
+                                </td>
+                                <!-- Item Name -->
+                                <td class="p-3 font-semibold text-slate-800">
+                                    {{ item.name }}
+                                </td>
+                                <!-- Quantity (Col C) -->
+                                <td class="p-3 text-right font-mono font-semibold text-slate-700">
+                                    {{ item.qty }}
+                                </td>
+                                <!-- Unit Price (Col D) -->
+                                <td class="p-3 text-right font-mono text-slate-700">
+                                    {{ formatRupiah(item.price) }}
+                                </td>
+                                <!-- Manual Total Input (Col E) -->
+                                <td class="p-2">
+                                    <input 
+                                        type="number" 
+                                        v-model.number="item.manualTotal" 
+                                        placeholder=""
+                                        class="w-full px-2.5 py-1.5 border rounded-lg font-mono text-xs focus:ring-2 focus:ring-blue-500 transition"
+                                        :class="getInputBorderClass(item.status.manualValid)"
+                                    >
+                                </td>
+                                <!-- Excel Formula Input (Col F) -->
+                                <td class="p-2">
+                                    <input 
+                                        type="text" 
+                                        v-model="item.excelFormula" 
+                                        placeholder=""
+                                        class="w-full px-2.5 py-1.5 border rounded-lg font-mono text-xs uppercase focus:ring-2 focus:ring-purple-500 transition"
+                                        :class="getInputBorderClass(item.status.formulaValid)"
+                                    >
+                                </td>
+                                <!-- Formula Calculated Result -->
+                                <td class="p-3 text-right font-mono font-bold text-slate-800">
+                                    <span v-if="item.status.formulaValid" class="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                        {{ formatRupiah(item.qty * item.price) }}
+                                    </span>
+                                    <span v-else class="text-slate-400 text-xs italic">-</span>
+                                </td>
+                                <!-- Status Badge -->
+                                <td class="p-3 text-center">
+                                    <span v-if="!isEvaluated" class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                                        <i class="fa-regular fa-clock"></i> Belum Diisi
+                                    </span>
+                                    <span v-else-if="item.status.manualValid && item.status.formulaValid" class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-1 rounded-full">
+                                        <i class="fa-solid fa-circle-check"></i> Benar
+                                    </span>
+                                    <span v-else class="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-100 border border-rose-300 px-2 py-1 rounded-full">
+                                        <i class="fa-solid fa-triangle-exclamation"></i> Periksa
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TUGAS REKAPITULASI (ADDITIONAL TASKS) -->
+            <div class="bg-white text-slate-900 rounded-2xl shadow-xl p-6 border border-slate-200 space-y-6">
+                <div class="border-b border-slate-200 pb-4 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-navy-900 flex items-center gap-2">
+                            <i class="fa-solid fa-calculator text-purple-600"></i>
+                            Tugas Rekapitulasi & Fungsi SUM
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">Selesaikan 3 tugas perhitungan akhir berikut ini</p>
+                    </div>
+                    <span class="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full">
+                        Total 40 Poin
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                    <!-- TUGAS 1 -->
+                    <div class="p-4 rounded-xl border transition" :class="getTaskCardClass(taskStatus.task1)">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-extrabold uppercase text-purple-700 tracking-wider">Tugas 1 (10 Poin)</span>
+                            <i v-if="isEvaluated && taskStatus.task1" class="fa-solid fa-circle-check text-emerald-600"></i>
+                        </div>
+                        <h4 class="font-bold text-sm text-slate-800 mb-1">Total Jumlah Barang</h4>
+                        <p class="text-xs text-slate-500 mb-3">Tuliskan rumus SUM kuantitas (C9 s/d C23) & hasil penjumlahannya.</p>
+
+                        <div class="space-y-2.5">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 uppercase">Rumus Excel SUM</label>
+                                <input type="text" v-model="tasks.task1Formula" placeholder="" class="w-full mt-1 px-3 py-1.5 border rounded-lg font-mono text-xs uppercase">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 uppercase">Hasil Penjumlahan Manual</label>
+                                <input type="number" v-model.number="tasks.task1Result" placeholder="" class="w-full mt-1 px-3 py-1.5 border rounded-lg font-mono text-xs">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TUGAS 2 -->
+                    <div class="p-4 rounded-xl border transition" :class="getTaskCardCardClass(taskStatus.task2)">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-extrabold uppercase text-purple-700 tracking-wider">Tugas 2 (10 Poin)</span>
+                            <i v-if="isEvaluated && taskStatus.task2" class="fa-solid fa-circle-check text-emerald-600"></i>
+                        </div>
+                        <h4 class="font-bold text-sm text-slate-800 mb-1">Total Biaya Manual</h4>
+                        <p class="text-xs text-slate-500 mb-3">Hitung jumlah keseluruhan dari total manual 15 barang di atas.</p>
+
+                        <div class="space-y-2.5">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 uppercase">Total Seluruh Biaya (Rp)</label>
+                                <input type="number" v-model.number="tasks.task2ManualTotal" placeholder="" class="w-full mt-1 px-3 py-1.5 border rounded-lg font-mono text-xs">
+                            </div>
+                            <div class="text-[11px] text-slate-400 italic pt-2">
+                                *Masukkan angka tanpa titik atau tanda koma.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TUGAS 3 -->
+                    <div class="p-4 rounded-xl border transition" :class="getTaskCardCardClass(taskStatus.task3)">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-extrabold uppercase text-purple-700 tracking-wider">Tugas 3 (20 Poin)</span>
+                            <i v-if="isEvaluated && taskStatus.task3" class="fa-solid fa-circle-check text-emerald-600"></i>
+                        </div>
+                        <h4 class="font-bold text-sm text-slate-800 mb-1">Total Biaya Rumus SUM</h4>
+                        <p class="text-xs text-slate-500 mb-3">Gunakan fungsi SUM Excel untuk menjumlahkan kolom hasil F (F9 s/d F23).</p>
+
+                        <div class="space-y-2.5">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 uppercase">Rumus Excel SUM Biaya</label>
+                                <input type="text" v-model="tasks.task3Formula" placeholder="" class="w-full mt-1 px-3 py-1.5 border rounded-lg font-mono text-xs uppercase">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 uppercase">Hasil Rumus Otomatis</label>
+                                <div class="mt-1 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg font-mono text-xs font-bold text-slate-800">
+                                    <span v-if="taskStatus.task3FormulaValid" class="text-emerald-700">Rp3.602.000</span>
+                                    <span v-else class="text-slate-400 italic">Otomatis muncul jika rumus benar</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- FEEDBACK & EVALUATION RESULTS PANEL (LIVE REALTME) -->
+            <div id="feedback-panel" class="bg-white text-slate-900 rounded-3xl shadow-2xl p-6 sm:p-8 border border-slate-200 space-y-6">
+                <!-- SCORE HEADER -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 p-6 rounded-2xl" :class="allCorrect ? 'bg-gradient-to-r from-emerald-900 to-teal-900 text-white' : 'bg-gradient-to-r from-slate-900 to-navy-900 text-white'">
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span v-if="allCorrect" class="px-3 py-1 bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-xs font-bold rounded-full">
+                                <i class="fa-solid fa-award"></i> Sempurna! (100/100)
+                            </span>
+                            <span v-else class="px-3 py-1 bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold rounded-full">
+                                <i class="fa-solid fa-arrows-rotate animate-spin text-xs"></i> Pemeriksaan Otomatis (Real-time)
+                            </span>
+                        </div>
+                        <h3 class="text-2xl font-extrabold">Hasil Evaluasi Excel Health Lab</h3>
+                        <p class="text-xs sm:text-sm text-slate-300">
+                            {{ allCorrect ? 'Selamat! Anda telah menyelesaikan seluruh tantangan perhitungan dan rumus Excel dengan sempurna.' : 'Lengkapi dan perbaiki lembar kerja di atas. Nilai dan status diperbarui secara otomatis saat Anda mengetik.' }}
+                        </p>
+                    </div>
+
+                    <div class="flex items-center gap-6 bg-white/10 p-4 rounded-xl border border-white/10 backdrop-blur self-start md:self-auto">
+                        <div class="text-center">
+                            <span class="block text-[11px] uppercase tracking-wider text-slate-300 font-bold">Total Poin</span>
+                            <span class="text-4xl font-extrabold font-mono" :class="totalScore >= 70 ? 'text-emerald-400' : 'text-amber-400'">
+                                {{ totalScore }}
+                            </span>
+                            <span class="text-xs text-slate-400">/ 100</span>
+                        </div>
+                        <div class="border-l border-white/20 pl-6 text-center">
+                            <span class="block text-[11px] uppercase tracking-wider text-slate-300 font-bold">Status Sertifikat</span>
+                            <span v-if="totalScore >= 70" class="inline-block mt-1 text-xs font-bold bg-emerald-500 text-white px-2.5 py-1 rounded">
+                                SIAP DIUNDUH
+                            </span>
+                            <span v-else class="inline-block mt-1 text-xs font-bold bg-slate-700 text-slate-300 px-2.5 py-1 rounded">
+                                MIN. NILAI 70
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ITEM FEEDBACK LIST IF ERRORS EXIST -->
+                <div v-if="!allCorrect && errorFeedbackList.length > 0" class="space-y-4">
+                    <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-purple-600"></i>
+                        Petunjuk & Bagian yang Perlu Diperbaiki ({{ errorFeedbackList.length }} Item):
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+                        <div v-for="err in errorFeedbackList" :key="err.title" class="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
+                            <div class="font-bold text-rose-800 flex items-center gap-1.5">
+                                <i class="fa-solid fa-circle-xmark"></i>
+                                <span>{{ err.title }}</span>
+                            </div>
+                            <p class="text-slate-700 leading-relaxed">{{ err.message }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CERTIFICATE READY BANNER & PREVIEW -->
+                <div v-if="totalScore >= 70" class="space-y-6 pt-4 border-t border-slate-200">
+                    <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-sm flex items-start gap-3">
+                        <i class="fa-solid fa-circle-check text-emerald-600 text-xl mt-0.5"></i>
+                        <div>
+                            <p class="font-bold">Selamat! Latihan Anda telah memenuhi syarat kelulusan.</p>
+                            <p class="text-xs text-emerald-800 mt-0.5">
+                                Anda berhasil menyelesaikan tantangan Excel Health Lab dengan capaian nilai <strong class="font-bold">{{ totalScore }}/100</strong> (Predikat: <strong>{{ predicate }}</strong>). Sertifikat penyelesaian latihan Anda siap untuk diunduh.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- CERTIFICATE DOWNLOAD ACTION -->
+                    <div class="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-900 text-white rounded-2xl">
+                        <div>
+                            <h4 class="font-bold text-sm">Sertifikat Penyelesaian Latihan</h4>
+                            <p class="text-xs text-slate-400">Kode Unik: <span class="font-mono text-purple-300">{{ certCode }}</span></p>
+                        </div>
+                        <button @click="generatePDF" :disabled="isGeneratingPDF" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg transition flex items-center gap-2">
+                            <i class="fa-solid fa-file-arrow-down text-lg"></i>
+                            <span>{{ isGeneratingPDF ? 'Mendownload PDF...' : 'Unduh Sertifikat PDF' }}</span>
+                        </button>
+                    </div>
+
+                    <!-- CERTIFICATE PREVIEW CONTAINER -->
+                    <div class="border border-slate-300 rounded-2xl p-4 bg-slate-100 overflow-x-auto">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 text-center">Pratinjau Sertifikat (Landscape)</p>
+                        
+                        <!-- CERTIFICATE HTML DOM FOR PDF CANVAS -->
+                        <div id="certificate-node" class="w-[900px] h-[630px] mx-auto bg-white text-navy-950 p-10 relative flex flex-col justify-between cert-border shadow-2xl font-sans overflow-hidden">
+                            <!-- Background Decor -->
+                            <div class="absolute -right-20 -bottom-20 w-80 h-80 bg-purple-100/60 rounded-full blur-3xl pointer-events-none"></div>
+                            <div class="absolute -left-20 -top-20 w-80 h-80 bg-blue-100/60 rounded-full blur-3xl pointer-events-none"></div>
+
+                            <!-- Header -->
+                            <div class="text-center space-y-2 border-b-2 border-slate-800 pb-4 relative z-10">
+                                <div class="flex items-center justify-center gap-3">
+                                    <div class="w-12 h-12 bg-navy-900 text-white rounded-xl flex items-center justify-center text-2xl font-bold shadow">
+                                        <i class="fa-solid fa-notes-medical"></i>
+                                    </div>
+                                    <div class="text-left">
+                                        <h3 class="font-extrabold text-navy-900 tracking-wider uppercase text-base">SMKS KESEHATAN FANIA SALSABILA KOTA JAMBI</h3>
+                                        <p class="text-xs text-purple-800 font-semibold">Program Keahlian Informatika & Manajemen Farmasi Kesehatan</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Title -->
+                            <div class="text-center my-3 relative z-10">
+                                <h2 class="font-serif text-3xl font-extrabold text-navy-900 tracking-widest uppercase">SERTIFIKAT PENYELESAIAN LATIHAN</h2>
+                                <p class="text-xs font-semibold text-slate-600 mt-1 uppercase tracking-wider">Excel Health Lab — Tantangan Inventaris Barang Kesehatan</p>
+                            </div>
+
+                            <!-- Body Content -->
+                            <div class="text-center space-y-3 my-2 relative z-10">
+                                <p class="text-xs font-medium text-slate-600 uppercase tracking-widest">Diberikan Kepada:</p>
+                                <h1 class="text-3xl font-extrabold text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-8">
+                                    {{ student.name }}
+                                </h1>
+                                <p class="text-xs font-semibold text-slate-700">
+                                    Kelas: <span class="font-bold text-slate-900">{{ student.class }}</span>
+                                </p>
+
+                                <p class="text-xs text-slate-700 max-w-2xl mx-auto leading-relaxed">
+                                    Telah menyelesaikan praktikum Excel Health Lab mencakup materi penghitungan manual, rumus perkalian sel Excel, dan pengolahan fungsi SUM pada data inventaris barang kesehatan.
+                                </p>
+
+                                <!-- RINCIAN SKOR PENILAIAN DI SERTIFIKAT -->
+                                <div class="grid grid-cols-3 gap-3 max-w-md mx-auto bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
+                                    <div class="text-center">
+                                        <span class="block text-slate-500 text-[10px] uppercase font-semibold">Total Manual</span>
+                                        <span class="font-bold font-mono text-purple-900 text-sm">{{ manualScore }} / 30</span>
+                                    </div>
+                                    <div class="text-center border-x border-slate-200">
+                                        <span class="block text-slate-500 text-[10px] uppercase font-semibold">Rumus Excel</span>
+                                        <span class="font-bold font-mono text-purple-900 text-sm">{{ formulaScore }} / 30</span>
+                                    </div>
+                                    <div class="text-center">
+                                        <span class="block text-slate-500 text-[10px] uppercase font-semibold">Fungsi SUM</span>
+                                        <span class="font-bold font-mono text-purple-900 text-sm">{{ recapScore }} / 40</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Score Badge & Footer -->
+                            <div class="flex items-end justify-between border-t border-slate-300 pt-4 relative z-10">
+                                <!-- Score & Verification -->
+                                <div class="space-y-1 text-left">
+                                    <div class="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-300 px-3 py-1 rounded-lg">
+                                        <span class="text-xs font-extrabold text-emerald-800 uppercase">NILAI AKHIR:</span>
+                                        <span class="text-base font-extrabold text-emerald-700 font-mono">{{ totalScore }} / 100</span>
+                                        <span class="text-xs font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded uppercase">({{ predicate }})</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-500">Tanggal: {{ student.date }}</p>
+                                    <p class="text-[10px] text-slate-500">No. Sertifikat: <span class="font-mono font-bold">{{ certCode }}</span></p>
+                                </div>
+
+                                <!-- Signature -->
+                                <div class="text-center space-y-8 pr-6">
+                                    <p class="text-xs font-semibold text-slate-700">Guru Mata Pelajaran</p>
+                                    <div class="border-b border-slate-800 w-44 mx-auto"></div>
+                                    <p class="text-xs font-bold text-navy-900">Tim Informatika & Excel Health Lab</p>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-navy-950 border-t border-purple-950 py-4 text-center text-xs text-slate-400">
+        <div class="max-w-7xl mx-auto px-4">
+            <p>© 2026 SMKS Kesehatan Fania Salsabila Kota Jambi. Media Pembelajaran Informatika Excel.</p>
+        </div>
+    </footer>
+
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            currentStep: 1,
+            formError: '',
+            isEvaluated: true,
+            isGeneratingPDF: false,
+            confettiFired: false,
+            totalScore: 0,
+            allCorrect: false,
+            certCode: '',
+
+            // Student Identity Data
+            student: {
+                name: '',
+                class: '',
+                school: 'SMKS Kesehatan Fania Salsabila Kota Jambi',
+                date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+            },
+
+            // 15 Fixed Healthcare Inventory Items (Excel Rows 9 to 23)
+            items: [
+                { id: 1, row: 9,  name: 'Masker medis (1 kotak)',       qty: 12, price: 18000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 2, row: 10, name: 'Sarung tangan medis (1 kotak)', qty: 8,  price: 35000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 3, row: 11, name: 'Hand sanitizer 500 ml',       qty: 10, price: 28000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 4, row: 12, name: 'Kasa steril (1 pak)',          qty: 15, price: 12000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 5, row: 13, name: 'Perban elastis',               qty: 10, price: 15000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 6, row: 14, name: 'Plester luka (1 kotak)',       qty: 8,  price: 22000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 7, row: 15, name: 'Kapas medis (1 pak)',          qty: 12, price: 14000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 8, row: 16, name: 'Alkohol 70% 1 liter',          qty: 6,  price: 32000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 9, row: 17, name: 'Povidone iodine 60 ml',       qty: 10, price: 18000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 10, row: 18, name: 'Spuit 3 ml (1 kotak)',        qty: 5,  price: 45000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 11, row: 19, name: 'Termometer digital',          qty: 4,  price: 65000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 12, row: 20, name: 'Stetoskop',                   qty: 3,  price: 125000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 13, row: 21, name: 'Tensimeter digital',          qty: 2,  price: 280000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 14, row: 22, name: 'Face shield',                 qty: 10, price: 12000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } },
+                { id: 15, row: 23, name: 'Apron sekali pakai (1 pak)',   qty: 6,  price: 40000, manualTotal: null, excelFormula: '', status: { manualValid: false, formulaValid: false } }
+            ],
+
+            // Recapitulation Tasks Data
+            tasks: {
+                task1Formula: '',
+                task1Result: null,
+                task2ManualTotal: null,
+                task3Formula: ''
+            },
+
+            taskStatus: {
+                task1FormulaValid: false,
+                task1ResultValid: false,
+                task1: false,
+                task2: false,
+                task3FormulaValid: false,
+                task3: false
+            },
+
+            errorFeedbackList: []
+        };
+    },
+    computed: {
+        manualScore() {
+            return this.items.filter(item => item.status.manualValid).length * 2;
+        },
+        formulaScore() {
+            return this.items.filter(item => item.status.formulaValid).length * 2;
+        },
+        recapScore() {
+            let score = 0;
+            if (this.taskStatus.task1) score += 10;
+            if (this.taskStatus.task2) score += 10;
+            if (this.taskStatus.task3) score += 20;
+            return score;
+        },
+        predicate() {
+            if (this.totalScore === 100) return 'Sangat Memuaskan';
+            if (this.totalScore >= 85) return 'Sangat Baik';
+            if (this.totalScore >= 70) return 'Baik';
+            if (this.totalScore >= 60) return 'Cukup';
+            return 'Kurang';
+        }
+    },
+    watch: {
+        items: {
+            handler() { this.evaluateAnswers(); },
+            deep: true
+        },
+        tasks: {
+            handler() { this.evaluateAnswers(); },
+            deep: true
+        }
+    },
+    mounted() {
+        const savedStudent = localStorage.getItem('excel_lab_student');
+        if (savedStudent) {
+            try {
+                this.student = JSON.parse(savedStudent);
+            } catch(e){}
+        }
+        this.generateCertCode();
+        this.evaluateAnswers();
+    },
+    methods: {
+        generateCertCode() {
+            const rand = Math.floor(10000 + Math.random() * 90000);
+            this.certCode = `FSA-EXCEL-2026-${rand}`;
+        },
+        formatRupiah(amount) {
+            if (amount === null || amount === undefined || isNaN(amount)) return 'Rp0';
+            return 'Rp' + amount.toLocaleString('id-ID');
+        },
+        startLab() {
+            if (!this.student.name || !this.student.class) {
+                this.formError = 'Mohon isi Nama Lengkap dan Kelas terlebih dahulu.';
+                return;
+            }
+            this.formError = '';
+            localStorage.setItem('excel_lab_student', JSON.stringify(this.student));
+            this.currentStep = 2;
+            this.evaluateAnswers();
+        },
+
+        // SAFE FORMULA PARSER WITHOUT USING EVAL()
+        validateMultiplicationFormula(inputFormula, rowNumber) {
+            if (!inputFormula || typeof inputFormula !== 'string') return false;
+            const clean = inputFormula.replace(/\s+/g, '').toUpperCase();
+            
+            const target1 = `=C${rowNumber}*D${rowNumber}`;
+            const target2 = `=D${rowNumber}*C${rowNumber}`;
+            const target3 = `=PRODUCT(C${rowNumber},D${rowNumber})`;
+            const target4 = `=PRODUCT(D${rowNumber},C${rowNumber})`;
+            const target5 = `=PRODUCT(C${rowNumber}:D${rowNumber})`;
+
+            return (clean === target1 || clean === target2 || clean === target3 || clean === target4 || clean === target5);
+        },
+
+        validateSumQuantityFormula(inputFormula) {
+            if (!inputFormula || typeof inputFormula !== 'string') return false;
+            const clean = inputFormula.replace(/\s+/g, '').toUpperCase();
+            return (clean === '=SUM(C9:C23)' || clean === '=SUM(C9..C23)');
+        },
+
+        validateSumCostFormula(inputFormula) {
+            if (!inputFormula || typeof inputFormula !== 'string') return false;
+            const clean = inputFormula.replace(/\s+/g, '').toUpperCase();
+            return (clean === '=SUM(F9:F23)' || clean === '=SUM(F9..F23)');
+        },
+
+        evaluateAnswers() {
+            let score = 0;
+            this.errorFeedbackList = [];
+
+            // 1. Check 15 Items (Manual 30 pts + Formula 30 pts)
+            this.items.forEach(item => {
+                const expectedTotal = item.qty * item.price;
+                
+                // Manual Total Check
+                const isManualOk = Number(item.manualTotal) === expectedTotal;
+                item.status.manualValid = isManualOk;
+                if (isManualOk) {
+                    score += 2;
+                } else if (item.manualTotal !== null && item.manualTotal !== '') {
+                    this.errorFeedbackList.push({
+                        title: `Baris ${item.row}: ${item.name} (Total Manual)`,
+                        message: `Penhitungan manual belum tepat. Hasil ${item.qty} × ${this.formatRupiah(item.price)} seharusnya ${this.formatRupiah(expectedTotal)}.`
+                    });
+                } else {
+                    this.errorFeedbackList.push({
+                        title: `Baris ${item.row}: ${item.name} (Total Manual)`,
+                        message: `Belum diisi. Masukkan hasil perkalian ${item.qty} × ${item.price}.`
+                    });
+                }
+
+                // Formula Check
+                const isFormulaOk = this.validateMultiplicationFormula(item.excelFormula, item.row);
+                item.status.formulaValid = isFormulaOk;
+                if (isFormulaOk) {
+                    score += 2;
+                } else if (item.excelFormula.trim() !== '') {
+                    this.errorFeedbackList.push({
+                        title: `Baris ${item.row}: ${item.name} (Rumus Excel)`,
+                        message: `Rumus Excel perkalian kurang tepat. Gunakan format =C${item.row}*D${item.row}`
+                    });
+                } else {
+                    this.errorFeedbackList.push({
+                        title: `Baris ${item.row}: ${item.name} (Rumus Excel)`,
+                        message: `Belum diisi. Tuliskan rumus =C${item.row}*D${item.row}`
+                    });
+                }
+            });
+
+            // 2. Tugas 1: SUM Quantity (10 pts)
+            const t1FormulaOk = this.validateSumQuantityFormula(this.tasks.task1Formula);
+            const t1ResultOk = Number(this.tasks.task1Result) === 121;
+            this.taskStatus.task1FormulaValid = t1FormulaOk;
+            this.taskStatus.task1ResultValid = t1ResultOk;
+            this.taskStatus.task1 = t1FormulaOk && t1ResultOk;
+
+            if (this.taskStatus.task1) {
+                score += 10;
+            } else {
+                if (!t1FormulaOk && this.tasks.task1Formula.trim() !== '') {
+                    this.errorFeedbackList.push({
+                        title: 'Tugas 1: Rumus SUM Kuantitas',
+                        message: 'Rumus perkalian jumlah total kuantitas belum benar. Gunakan =SUM(C9:C23).'
+                    });
+                }
+                if (!t1ResultOk && this.tasks.task1Result !== null && this.tasks.task1Result !== '') {
+                    this.errorFeedbackList.push({
+                        title: 'Tugas 1: Hasil Penjumlahan Kuantitas',
+                        message: 'Penjumlahan kuantitas belum tepat. Hasil seharusnya 121.'
+                    });
+                }
+            }
+
+            // 3. Tugas 2: Manual Total Cost (10 pts)
+            const expectedTotalCost = 3602000;
+            const t2Ok = Number(this.tasks.task2ManualTotal) === expectedTotalCost;
+            this.taskStatus.task2 = t2Ok;
+            if (t2Ok) {
+                score += 10;
+            } else if (this.tasks.task2ManualTotal !== null && this.tasks.task2ManualTotal !== '') {
+                this.errorFeedbackList.push({
+                    title: 'Tugas 2: Total Biaya Manual',
+                    message: `Total keseluruhan biaya secara manual belum tepat. Hasil seharusnya ${this.formatRupiah(expectedTotalCost)} (Ketik angka: 3602000).`
+                });
+            }
+
+            // 4. Tugas 3: SUM Total Cost Formula (20 pts)
+            const t3FormulaOk = this.validateSumCostFormula(this.tasks.task3Formula);
+            this.taskStatus.task3FormulaValid = t3FormulaOk;
+            this.taskStatus.task3 = t3FormulaOk;
+            if (t3FormulaOk) {
+                score += 20;
+            } else if (this.tasks.task3Formula.trim() !== '') {
+                this.errorFeedbackList.push({
+                    title: 'Tugas 3: Rumus SUM Total Biaya',
+                    message: 'Rumus SUM untuk menjumlahkan kolom hasil biaya (F9 s/d F23) belum benar. Ketikkan =SUM(F9:F23).'
+                });
+            }
+
+            this.totalScore = score;
+            this.allCorrect = (score === 100);
+
+            if (this.allCorrect && !this.confettiFired && typeof confetti === 'function') {
+                this.confettiFired = true;
+                confetti({
+                    particleCount: 120,
+                    spread: 80,
+                    origin: { y: 0.6 }
+                });
+            }
+        },
+
+        getInputBorderClass(isValid) {
+            return isValid ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900 font-bold' : 'border-slate-300';
+        },
+
+        getTaskCardClass(isOk) {
+            return isOk ? 'border-emerald-300 bg-emerald-50/60' : 'border-slate-200 bg-slate-50';
+        },
+
+        getTaskCardCardClass(isOk) {
+            return isOk ? 'border-emerald-300 bg-emerald-50/60' : 'border-slate-200 bg-slate-50';
+        },
+
+        async generatePDF() {
+            if (this.totalScore < 70) return;
+            this.isGeneratingPDF = true;
+
+            const element = document.getElementById('certificate-node');
+            if (!element) {
+                alert('Elemen sertifikat tidak ditemukan.');
+                this.isGeneratingPDF = false;
+                return;
+            }
+
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff'
+                });
+
+                const imgData = canvas.toDataURL('image/png');
+                const { jsPDF } = window.jspdf;
+                
+                const pdf = new jsPDF('landscape', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                
+                const safeName = (this.student.name || 'Siswa').replace(/[^a-zA-Z0-9_-]/g, '_');
+                pdf.save(`Sertifikat_Excel_${safeName}.pdf`);
+            } catch (err) {
+                console.error('PDF Generation Error:', err);
+                alert('Gagal mengunduh PDF. Silakan coba lagi.');
+            } finally {
+                this.isGeneratingPDF = false;
+            }
+        }
+    }
+}).mount('#app');
+</script>
+</body>
+</html>
